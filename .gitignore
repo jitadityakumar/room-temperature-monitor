@@ -1,0 +1,9 @@
+context.md
+.env
+.env.*
+!*.example
+*.log
+*.csv
+__pycache__/
+*.pyc
+.venv/
