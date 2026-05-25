@@ -1,0 +1,9 @@
+services:
+  poller:
+    build: .
+    restart: unless-stopped
+    network_mode: host
+    privileged: true
+    volumes:
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
+    env_file: .env
