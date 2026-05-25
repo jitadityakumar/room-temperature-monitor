@@ -7,6 +7,8 @@ Distributed BLE poller that reads temperature, humidity, and battery from Thermo
 - Python 3.12
 - bleak — BLE scanning
 - thermopro-ble — TP357 advertisement decoding
+- httpx — HTTP client (used by both poller and weather)
+- Open-Meteo API — outdoor weather (free, no key required)
 - Docker / Docker Compose
 - VictoriaMetrics (external, shared)
 - Grafana (external, shared)
@@ -19,6 +21,12 @@ poller/
   requirements.txt
   docker-compose.yml
   .env.example        ← template; copy to .env and fill in per host
+weather/
+  weather.py          ← polls Open-Meteo, writes outdoor_temperature + outdoor_humidity
+  Dockerfile
+  requirements.txt
+  docker-compose.yml
+  .env.example        ← template; copy to .env and fill in (LAT, LON, VM_URL)
 scripts/
   check-secrets.sh    ← pre-commit hook: blocks .env commits
 deploy.sh             ← deploys to local and/or remote host
@@ -59,7 +67,9 @@ Deploy:
 ./deploy.sh remote    # deploy to remote host only
 ```
 
-## Environment variables (poller/.env)
+## Environment variables
+
+### poller/.env
 
 | Variable | Description | Default |
 |---|---|---|
@@ -67,7 +77,19 @@ Deploy:
 | `VM_URL` | VictoriaMetrics HTTP endpoint | required |
 | `POLL_INTERVAL_SECS` | Seconds between polls | `60` |
 
+### weather/.env
+
+| Variable | Description | Default |
+|---|---|---|
+| `LAT` | Latitude of location | required |
+| `LON` | Longitude of location | required |
+| `VM_URL` | VictoriaMetrics HTTP endpoint | required |
+| `POLL_INTERVAL_SECS` | Seconds between polls | `900` |
+
+> **Note:** `LAT` and `LON` are personal — keep `weather/.env` local and never commit it.
+
 ## Key design decisions
 - Distributed scanning: one container per host, each scanning only the devices in range
 - Poller writes directly to VictoriaMetrics — Prometheus is not involved
 - Docker used for isolation; BLE access via host network + D-Bus mount
+- Weather container polls Open-Meteo every 15 min; Grafana gauge queries use `last_over_time(...[20m])` to avoid staleness gaps between polls

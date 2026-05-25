@@ -9,6 +9,7 @@ Designed to run across multiple hosts — useful when sensors are spread across 
 - Docker and Docker Compose on each host machine
 - A running VictoriaMetrics instance accessible from each host
 - Bluetooth adapter (`hci0`) on each host
+- BlueZ installed and running on each host (`sudo apt install bluez`)
 
 ## Setup
 
@@ -35,7 +36,30 @@ POLL_INTERVAL_SECS=60
 
 Set `DEVICES` to the MAC addresses of the sensors this host can reach. Set `VM_URL` to your VictoriaMetrics endpoint.
 
-### 3. Configure deployment (optional)
+### 3. Configure the outdoor weather poller (optional)
+
+```bash
+cp weather/.env.example weather/.env
+```
+
+Edit `weather/.env`:
+
+```
+LAT=your-latitude
+LON=your-longitude
+VM_URL=http://your-victoriametrics-host:8428
+POLL_INTERVAL_SECS=900
+```
+
+Start it:
+
+```bash
+cd weather && docker compose up -d --build
+```
+
+Fetches current temperature and humidity from [Open-Meteo](https://open-meteo.com) every 15 minutes. No API key required.
+
+### 4. Configure deployment (optional)
 
 ```bash
 cp .env.deploy.example .env.deploy
@@ -43,7 +67,7 @@ cp .env.deploy.example .env.deploy
 
 Edit `.env.deploy` with your SSH details for the remote host.
 
-### 4. Start the poller
+### 5. Start the poller
 
 ```bash
 cd poller && docker compose up -d --build
@@ -61,14 +85,21 @@ After making changes, deploy to all hosts:
 
 ## Metrics written to VictoriaMetrics
 
+### Sensor metrics (label: `mac`)
+
 | Metric | Description |
 |---|---|
-| `thermo_temperature_celsius` | Temperature in °C |
-| `thermo_humidity_percent` | Relative humidity % |
-| `thermo_battery_percent` | Battery level % |
-| `thermo_rssi_dbm` | BLE signal strength in dBm |
+| `thermopro_temperature` | Temperature in °C |
+| `thermopro_humidity` | Relative humidity % |
+| `thermopro_battery` | Battery level % (1, 50, or 100 for TP357) |
+| `thermopro_signal_strength` | BLE signal strength in dBm |
 
-Labels: `mac`, `device`
+### Outdoor weather metrics
+
+| Metric | Description |
+|---|---|
+| `outdoor_temperature` | Outdoor temperature in °C |
+| `outdoor_humidity` | Outdoor relative humidity % |
 
 ## Finding your sensor MAC addresses
 
