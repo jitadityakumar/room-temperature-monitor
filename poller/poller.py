@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import math
 import os
 import time
 
@@ -14,6 +15,17 @@ DEVICES: set[str] = {mac.strip().upper() for mac in os.environ["DEVICES"].split(
 VM_URL: str = os.environ["VM_URL"].rstrip("/")
 POLL_INTERVAL: int = int(os.environ.get("POLL_INTERVAL_SECS", "60"))
 SCAN_DURATION: int = 10
+
+FEELS_LIKE_MIN_C = 16.0
+FEELS_LIKE_MAX_C = 40.0
+
+
+def feels_like(temp_c: float, rh: float) -> float | None:
+    if not (FEELS_LIKE_MIN_C <= temp_c <= FEELS_LIKE_MAX_C):
+        return None
+    rho = (rh / 100.0) * 6.105 * math.exp(17.27 * temp_c / (237.7 + temp_c))
+    return temp_c + 0.33 * rho - 4.00
+
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -89,6 +101,13 @@ async def main() -> None:
         try:
             results = await scan_once()
             if results:
+                for readings in results.values():
+                    temp = readings.get("temperature")
+                    rh = readings.get("humidity")
+                    if temp is not None and rh is not None:
+                        fl = feels_like(temp, rh)
+                        if fl is not None:
+                            readings["feels_like"] = round(fl, 1)
                 await write_to_vm(results)
             else:
                 log.warning("No readings from any target device")

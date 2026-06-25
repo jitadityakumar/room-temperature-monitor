@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import math
 import os
 import time
 
@@ -13,9 +14,21 @@ POLL_INTERVAL: int = int(os.environ.get("POLL_INTERVAL_SECS", "900"))
 OPEN_METEO_URL = (
     f"https://api.open-meteo.com/v1/forecast"
     f"?latitude={LAT}&longitude={LON}"
-    f"&current=temperature_2m,relative_humidity_2m"
+    f"&current=temperature_2m,relative_humidity_2m,wind_speed_10m"
+    f"&wind_speed_unit=ms"
     f"&timezone=Europe%2FLondon"
 )
+
+FEELS_LIKE_MIN_C = -5.0
+FEELS_LIKE_MAX_C = 45.0
+
+
+def feels_like(temp_c: float, rh: float, wind_ms: float) -> float | None:
+    if not (FEELS_LIKE_MIN_C <= temp_c <= FEELS_LIKE_MAX_C):
+        return None
+    rho = (rh / 100.0) * 6.105 * math.exp(17.27 * temp_c / (237.7 + temp_c))
+    return temp_c + 0.33 * rho - 0.70 * wind_ms - 4.00
+
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -25,10 +38,21 @@ async def fetch_weather(client: httpx.AsyncClient) -> dict[str, float]:
     resp = await client.get(OPEN_METEO_URL, timeout=10)
     resp.raise_for_status()
     current = resp.json()["current"]
-    return {
-        "temperature": float(current["temperature_2m"]),
-        "humidity": float(current["relative_humidity_2m"]),
+    temp = float(current["temperature_2m"])
+    rh = float(current["relative_humidity_2m"])
+    readings: dict[str, float] = {
+        "temperature": temp,
+        "humidity": rh,
     }
+    raw_wind = current.get("wind_speed_10m")
+    wind_ms = float(raw_wind) if raw_wind is not None else None
+    if wind_ms is not None:
+        fl = feels_like(temp, rh, wind_ms)
+        if fl is not None:
+            readings["feels_like"] = round(fl, 1)
+    else:
+        log.warning("wind_speed_10m missing from Open-Meteo response; skipping feels_like")
+    return readings
 
 
 async def write_to_vm(client: httpx.AsyncClient, readings: dict[str, float]) -> None:
