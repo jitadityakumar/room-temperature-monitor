@@ -1,0 +1,7 @@
+services:
+  kiosk:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8090:80"
+    env_file: .env
