@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Temperature Monitor</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    background: #0f1117;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+
+  #layout {
+    display: flex;
+    flex-direction: column;
+    width: 100vw;
+    height: 100vh;
+  }
+
+  #grafana {
+    flex: 1;
+    border: none;
+    display: block;
+  }
+
+  /* ── Forecast bar ── */
+  #forecast-bar {
+    flex-shrink: 0;
+    height: 168px;
+    background: #111827;
+    border-top: 1px solid #1f2937;
+    display: flex;
+    flex-direction: column;
+  }
+
+  #forecast-header {
+    display: flex;
+    align-items: center;
+    padding: 6px 16px 4px;
+    gap: 8px;
+  }
+
+  #forecast-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    color: #4b5563;
+    text-transform: uppercase;
+  }
+
+  #forecast-location {
+    font-size: 0.7rem;
+    color: #374151;
+    letter-spacing: 0.04em;
+  }
+
+  #forecast-slots {
+    flex: 1;
+    display: flex;
+    align-items: stretch;
+    padding: 0 6px 6px;
+    gap: 2px;
+  }
+
+  .slot {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 2px 8px;
+    border-radius: 6px;
+    position: relative;
+    transition: background 0.15s;
+  }
+
+  .slot.current {
+    background: #1e3a5f;
+    outline: 1px solid #2563eb;
+    outline-offset: -1px;
+  }
+
+.slot-time {
+    font-size: 0.72rem;
+    color: #6b7280;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+  }
+
+  .slot.current .slot-time {
+    color: #60a5fa;
+    font-weight: 700;
+  }
+
+  .slot-icon {
+    font-size: 1.45rem;
+    line-height: 1;
+  }
+
+  .slot-temp {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #f1f5f9;
+  }
+
+  .slot.current .slot-temp {
+    color: #ffffff;
+  }
+
+  .slot-humidity {
+    font-size: 0.68rem;
+    color: #4b5563;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .slot.current .slot-humidity {
+    color: #6b7280;
+  }
+
+  /* temperature colour coding on the temp value */
+  .temp-cold  { color: #93c5fd; }
+  .temp-cool  { color: #6ee7b7; }
+  .temp-warm  { color: #fde68a; }
+  .temp-hot   { color: #fca5a5; }
+</style>
+</head>
+<body>
+<div id="layout">
+  <iframe
+    id="grafana"
+    src="http://100.71.231.39:3000/public-dashboards/a1328472c0b54119ab84acbf5ba739b5?kiosk"
+    allowfullscreen
+  ></iframe>
+
+  <div id="forecast-bar">
+    <div id="forecast-header">
+      <span id="forecast-label">24-hour forecast</span>
+      <span id="forecast-location">— London, UK</span>
+    </div>
+    <div id="forecast-slots"></div>
+  </div>
+</div>
+
+<script>
+  const TIMEZONE = "Europe/London";
+
+  // WMO weather code → condition name (is_day=1 for daytime, 0 for night)
+  function wmoToCondition(code, isDay) {
+    if (code === 0)                          return isDay ? "sunny" : "clear-night";
+    if (code <= 2)                           return "partly-cloudy";
+    if (code === 3)                          return "cloudy";
+    if (code === 45 || code === 48)          return "fog";
+    if (code >= 51 && code <= 57)            return "drizzle";
+    if (code >= 61 && code <= 67)            return "rainy";
+    if (code >= 71 && code <= 77)            return "snow";
+    if (code >= 80 && code <= 82)            return "rainy";
+    if (code === 85 || code === 86)          return "snow";
+    if (code >= 95)                          return "thunderstorm";
+    return isDay ? "sunny" : "clear-night";
+  }
+
+  const ICONS = {
+    "sunny":         "☀️",
+    "partly-cloudy": "⛅",
+    "cloudy":        "☁️",
+    "rainy":         "🌧️",
+    "clear-night":   "🌙",
+    "drizzle":       "🌦️",
+    "thunderstorm":  "⛈️",
+    "fog":           "🌫️",
+    "snow":          "❄️",
+  };
+
+  function tempClass(t) {
+    if (t < 18) return "temp-cold";
+    if (t <= 22) return "temp-cool";
+    if (t <= 28) return "temp-warm";
+    return "temp-hot";
+  }
+
+  function formatHour(h) {
+    if (h === 0)  return "12am";
+    if (h === 12) return "12pm";
+    return h < 12 ? `${h}am` : `${h - 12}pm`;
+  }
+
+  function render(slots) {
+    const container = document.getElementById("forecast-slots");
+    container.innerHTML = "";
+    slots.forEach((data, i) => {
+      const isCurrent = i === 0;
+      const icon = ICONS[data.condition] || "🌡️";
+      const timeLabel = isCurrent ? "Now" : formatHour(data.hourNum);
+      const tc = tempClass(data.temp);
+
+      const slot = document.createElement("div");
+      slot.className = "slot" + (isCurrent ? " current" : "");
+      slot.innerHTML = `
+        <span class="slot-time">${timeLabel}</span>
+        <span class="slot-icon">${icon}</span>
+        <span class="slot-temp ${tc}">${data.temp}°</span>
+        <span class="slot-humidity">💧 ${data.humidity}%</span>
+      `;
+      container.appendChild(slot);
+    });
+  }
+
+  function nowHourInTZ(tz) {
+    // Returns "YYYY-MM-DDTHH:00" in the given timezone — safe regardless of browser TZ
+    return new Intl.DateTimeFormat("sv", {
+      timeZone: tz,
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit",
+    }).format(new Date()).slice(0, 16).replace(" ", "T").slice(0, 13) + ":00";
+  }
+
+  function showError(msg) {
+    const container = document.getElementById("forecast-slots");
+    container.innerHTML = `<div style="color:#6b7280;font-size:0.8rem;margin:auto">${msg}</div>`;
+  }
+
+  async function fetchAndRender(lat, lon) {
+    const url = `https://api.open-meteo.com/v1/forecast`
+      + `?latitude=${lat}&longitude=${lon}`
+      + `&hourly=temperature_2m,relative_humidity_2m,weather_code,is_day`
+      + `&timezone=${encodeURIComponent(TIMEZONE)}`
+      + `&forecast_days=2`;
+
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const json = await resp.json();
+      const { time, temperature_2m, relative_humidity_2m, weather_code, is_day } = json.hourly;
+
+      const nowHourStr = nowHourInTZ(TIMEZONE);
+      const startIdx = time.findIndex(t => t === nowHourStr);
+      if (startIdx === -1) {
+        console.error("Could not find current hour in Open-Meteo response", nowHourStr, time.slice(0, 5));
+        showError("Forecast unavailable");
+        return;
+      }
+
+      const count = Math.min(24, time.length - startIdx);
+      const slots = [];
+      for (let i = 0; i < count; i++) {
+        const idx = startIdx + i;
+        const hourNum = parseInt(time[idx].slice(11, 13), 10);
+        slots.push({
+          hourNum,
+          temp:      Math.round(temperature_2m[idx]),
+          humidity:  Math.round(relative_humidity_2m[idx]),
+          condition: wmoToCondition(weather_code[idx], is_day[idx]),
+        });
+      }
+
+      render(slots);
+    } catch (err) {
+      console.error("Forecast fetch failed:", err);
+      showError("Forecast unavailable");
+    }
+  }
+
+  async function init() {
+    try {
+      const resp = await fetch("/config.json");
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const { lat, lon } = await resp.json();
+      fetchAndRender(lat, lon);
+      setInterval(() => fetchAndRender(lat, lon), 15 * 60 * 1000);
+    } catch (err) {
+      console.error("Failed to load config:", err);
+      showError("Configuration unavailable");
+    }
+  }
+
+  init();
+</script>
+</body>
+</html>

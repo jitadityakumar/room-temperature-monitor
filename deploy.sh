@@ -24,7 +24,11 @@ deploy_local() {
 
 deploy_remote() {
   echo "=== Deploying to $REMOTE_HOST ==="
-  ssh "$REMOTE_USER@$REMOTE_HOST" "cd '$REMOTE_REPO_DIR' && git pull origin main && cd poller && docker compose up -d --build"
+  ssh "$REMOTE_USER@$REMOTE_HOST" "
+    cd '$REMOTE_REPO_DIR' && git pull origin main
+    cd poller && docker compose up -d --build
+    cd ../kiosk && docker compose up -d --build
+  "
   echo "Remote deploy done."
 }
 
