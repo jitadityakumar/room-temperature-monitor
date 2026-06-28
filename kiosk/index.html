@@ -134,7 +134,7 @@
 <div id="layout">
   <iframe
     id="grafana"
-    src="http://100.71.231.39:3000/public-dashboards/a1328472c0b54119ab84acbf5ba739b5?kiosk"
+    src="about:blank"
     allowfullscreen
   ></iframe>
 
@@ -270,7 +270,8 @@
     try {
       const resp = await fetch("/config.json");
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const { lat, lon } = await resp.json();
+      const { lat, lon, grafanaUrl } = await resp.json();
+      document.getElementById("grafana").src = grafanaUrl;
       fetchAndRender(lat, lon);
       setInterval(() => fetchAndRender(lat, lon), 15 * 60 * 1000);
     } catch (err) {
