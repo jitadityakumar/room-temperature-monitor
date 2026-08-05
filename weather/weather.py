@@ -15,7 +15,7 @@ OPEN_METEO_URL = (
     f"https://api.open-meteo.com/v1/forecast"
     f"?latitude={LAT}&longitude={LON}"
     f"&current=temperature_2m,relative_humidity_2m,wind_speed_10m,"
-    f"precipitation,rain,showers,snowfall"
+    f"precipitation,rain,showers,snowfall,is_day"
     f"&wind_speed_unit=ms"
     f"&timezone=Europe%2FLondon"
 )
@@ -45,7 +45,7 @@ async def fetch_weather(client: httpx.AsyncClient) -> dict[str, float]:
         "temperature": temp,
         "humidity": rh,
     }
-    for metric in ("precipitation", "rain", "showers", "snowfall"):
+    for metric in ("precipitation", "rain", "showers", "snowfall", "is_day"):
         raw_value = current.get(metric)
         if raw_value is not None:
             readings[metric] = float(raw_value)
