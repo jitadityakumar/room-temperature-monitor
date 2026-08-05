@@ -14,7 +14,8 @@ POLL_INTERVAL: int = int(os.environ.get("POLL_INTERVAL_SECS", "900"))
 OPEN_METEO_URL = (
     f"https://api.open-meteo.com/v1/forecast"
     f"?latitude={LAT}&longitude={LON}"
-    f"&current=temperature_2m,relative_humidity_2m,wind_speed_10m"
+    f"&current=temperature_2m,relative_humidity_2m,wind_speed_10m,"
+    f"precipitation,rain,showers,snowfall"
     f"&wind_speed_unit=ms"
     f"&timezone=Europe%2FLondon"
 )
@@ -44,6 +45,12 @@ async def fetch_weather(client: httpx.AsyncClient) -> dict[str, float]:
         "temperature": temp,
         "humidity": rh,
     }
+    for metric in ("precipitation", "rain", "showers", "snowfall"):
+        raw_value = current.get(metric)
+        if raw_value is not None:
+            readings[metric] = float(raw_value)
+        else:
+            log.warning("%s missing from Open-Meteo response; skipping", metric)
     raw_wind = current.get("wind_speed_10m")
     wind_ms = float(raw_wind) if raw_wind is not None else None
     if wind_ms is not None:
