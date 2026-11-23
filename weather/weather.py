@@ -35,9 +35,35 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger(__name__)
 
 
+FETCH_RETRY_DELAYS_SECS = (30, 60, 120)
+
+
+async def get_with_retry(client: httpx.AsyncClient, url: str) -> httpx.Response:
+    """GET with backoff on transient failures (5xx, 429, network errors).
+
+    Open-Meteo intermittently returns 503 around the top of the hour; without
+    a retry a single failure leaves a 30-minute gap in the 15-minute series.
+    """
+    for attempt, delay in enumerate((*FETCH_RETRY_DELAYS_SECS, None), start=1):
+        try:
+            resp = await client.get(url, timeout=10)
+            if resp.status_code < 500 and resp.status_code != 429:
+                resp.raise_for_status()
+                return resp
+            error: Exception = httpx.HTTPStatusError(
+                f"HTTP {resp.status_code}", request=resp.request, response=resp
+            )
+        except httpx.TransportError as exc:
+            error = exc
+        if delay is None:
+            raise error
+        log.warning("Open-Meteo attempt %d failed (%s); retrying in %ds", attempt, error, delay)
+        await asyncio.sleep(delay)
+    raise AssertionError("unreachable")
+
+
 async def fetch_weather(client: httpx.AsyncClient) -> dict[str, float]:
-    resp = await client.get(OPEN_METEO_URL, timeout=10)
-    resp.raise_for_status()
+    resp = await get_with_retry(client, OPEN_METEO_URL)
     current = resp.json()["current"]
     temp = float(current["temperature_2m"])
     rh = float(current["relative_humidity_2m"])
